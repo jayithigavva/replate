@@ -1,0 +1,130 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+
+// Import screens
+import LoginScreen from './src/screens/LoginScreen';
+import RestaurantDashboard from './src/screens/RestaurantDashboard';
+import NGODashboard from './src/screens/NGODashboard';
+import ProfileScreen from './src/screens/ProfileScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import LoadingScreen from './src/components/LoadingScreen';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+
+const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
+
+// Tab Navigator for authenticated users
+function TabNavigator() {
+  const { user } = useAuth();
+  
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
+
+          if (route.name === 'Dashboard') {
+            iconName = focused ? 'home' : 'home-outline';
+          } else if (route.name === 'Notifications') {
+            iconName = focused ? 'notifications' : 'notifications-outline';
+          } else if (route.name === 'Profile') {
+            iconName = focused ? 'person' : 'person-outline';
+          }
+
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: '#FF6600',
+        tabBarInactiveTintColor: '#CCCCCC',
+        tabBarStyle: {
+          backgroundColor: '#111111',
+          borderTopColor: '#333333',
+          borderTopWidth: 1,
+        },
+        headerStyle: {
+          backgroundColor: '#000000',
+        },
+        headerTintColor: '#FF6600',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      })}
+    >
+      <Tab.Screen 
+        name="Dashboard" 
+        component={user?.role === 'restaurant' ? RestaurantDashboard : NGODashboard}
+        options={{ 
+          title: user?.role === 'restaurant' ? 'Restaurant Dashboard' : 'NGO Dashboard',
+          headerShown: false 
+        }}
+      />
+      <Tab.Screen 
+        name="Notifications" 
+        component={NotificationsScreen}
+        options={{ title: 'Notifications' }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={ProfileScreen}
+        options={{ title: 'Profile' }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+// Main App Navigator
+function AppNavigator() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen message="Initializing..." />;
+  }
+
+  return (
+    <NavigationContainer>
+      <StatusBar style="light" backgroundColor="#000000" />
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: '#000000',
+          },
+          headerTintColor: '#FF6600',
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+        }}
+      >
+        {user ? (
+          <Stack.Screen 
+            name="Main" 
+            component={TabNavigator}
+            options={{ headerShown: false }}
+          />
+        ) : (
+          <Stack.Screen 
+            name="Login" 
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <AppNavigator />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
+  );
+}

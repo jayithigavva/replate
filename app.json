@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Replate",
+    "slug": "replate-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.replate.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.replate.app",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-location"
+    ],
+    "extra": {
+      "mapboxAccessToken": "pk.eyJ1IjoiamF5aXRoaS1nYXZ2YSIsImEiOiJjbWdkdXp6azQwOWhwMm1wdmhnNXh4N3BqIn0.oaSHD-SqclgL0XIaNlMH4g"
+    }
+  }
+}
