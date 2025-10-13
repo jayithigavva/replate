@@ -174,7 +174,20 @@ app.post('/scan-food', upload.single('image'), async (req, res) => {
 // Mark food ready for pickup
 app.post('/ready-pickup', async (req, res) => {
   try {
-    const { restaurantId, location, address, description } = req.body;
+    const { 
+      restaurantId, 
+      restaurantEmail,
+      foodType,
+      quantity,
+      expiryTime,
+      notes,
+      aiScanResult,
+      aiConfidence,
+      imageUrl,
+      description,
+      location,
+      address
+    } = req.body;
 
     if (!restaurantId) {
       return res.status(400).json({ error: 'Restaurant ID required' });
@@ -184,31 +197,45 @@ app.post('/ready-pickup', async (req, res) => {
 
     if (supabase) {
       // Verify user is a restaurant
-      const { data: user, error: userError } = await supabase
+      const { data: user, error: userError} = await supabase
         .from('users')
         .select('role')
         .eq('id', restaurantId)
         .single();
 
       if (userError || !user || user.role !== 'restaurant') {
+        console.error('User validation error:', userError);
         return res.status(400).json({ error: 'Invalid restaurant ID' });
       }
 
-      // Create pickup record
+      // Create pickup record with ALL fields
       const { data: pickupData, error: pickupError } = await supabase
         .from('pickups')
         .insert({
           restaurant_id: restaurantId,
-          status: 'ready',
+          status: 'available',
+          food_type: foodType || '',
+          quantity: quantity || '',
+          expiry_time: expiryTime || null,
+          notes: notes || '',
+          ai_scan_result: aiScanResult || 'not_scanned',
+          ai_confidence: aiConfidence || 0,
+          image_url: imageUrl || null,
+          description: description || `${foodType} - ${quantity}`,
           location: location ? `POINT(${location.longitude} ${location.latitude})` : null,
-          address: address || '',
-          description: description || ''
+          address: address || ''
         })
         .select()
         .single();
 
-      if (!pickupError) {
+      if (pickupError) {
+        console.error('Pickup creation error:', pickupError);
+        return res.status(500).json({ error: 'Failed to create pickup', details: pickupError.message });
+      }
+
+      if (pickupData) {
         pickupId = pickupData.id;
+        console.log('✅ Pickup created successfully:', pickupId);
       }
     } else {
       console.log('📊 Mock mode: Pickup not saved to database');
@@ -222,7 +249,7 @@ app.post('/ready-pickup', async (req, res) => {
 
   } catch (error) {
     console.error('Ready pickup error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
 
@@ -250,7 +277,7 @@ app.get('/ngo-dashboard', async (req, res) => {
         return res.status(400).json({ error: 'Invalid NGO ID' });
       }
 
-      // Get all ready pickups with restaurant details
+      // Get all available pickups with restaurant details
       const { data: pickupData, error: pickupsError } = await supabase
         .from('pickups')
         .select(`
@@ -261,7 +288,7 @@ app.get('/ngo-dashboard', async (req, res) => {
             created_at
           )
         `)
-        .eq('status', 'ready')
+        .in('status', ['available', 'ready', 'accepted'])
         .order('created_at', { ascending: false });
 
       // Add restaurant name from email
