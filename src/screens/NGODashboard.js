@@ -9,7 +9,7 @@ import {
   FlatList,
   RefreshControl,
 } from 'react-native';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, supabase } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
 
 const NGODashboard = ({ navigation }) => {
@@ -22,14 +22,48 @@ const NGODashboard = ({ navigation }) => {
   useEffect(() => {
     loadPickups();
     
-    // Set up real-time updates - check for new pickups every 10 seconds
-    const interval = setInterval(() => {
-      console.log('Auto-refreshing pickups for NGO...');
-      loadPickups(true); // Silent refresh (no loading spinner)
-    }, 10000); // 10 seconds
+    // Set up Supabase Realtime subscription for instant notifications
+    // Subscribe to pickups table changes
+    const subscription = supabase
+      .channel('pickups-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'pickups'
+        },
+        (payload) => {
+          console.log('🔔 Realtime update:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            // New pickup created
+            Alert.alert(
+              '🔔 New Food Available!',
+              'A restaurant just listed food for donation. Check it out!',
+              [{ text: 'View Now', onPress: () => loadPickups() }]
+            );
+            loadPickups(true);
+          } else if (payload.eventType === 'UPDATE') {
+            // Pickup status updated (someone accepted it)
+            const updatedPickup = payload.new;
+            if (updatedPickup.status === 'accepted') {
+              Alert.alert(
+                'ℹ️ Pickup Accepted',
+                'Another NGO just accepted a pickup',
+                [{ text: 'OK', onPress: () => loadPickups(true) }]
+              );
+            }
+            loadPickups(true);
+          }
+        }
+      )
+      .subscribe();
     
-    return () => clearInterval(interval);
-  }, [lastPickupCount]);
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
 
   const loadPickups = async (silent = false) => {
     if (!silent) {
@@ -119,13 +153,30 @@ const NGODashboard = ({ navigation }) => {
     // Extract restaurant name from email or use full email
     const restaurantName = item.restaurant_name || item.restaurant?.email || 'Restaurant';
     const formattedDate = new Date(item.created_at).toLocaleString();
+    
+    // Determine status and if it's accepted by another NGO
+    const isAccepted = item.status === 'accepted';
+    const isAcceptedByMe = isAccepted && item.ngo_id === user.id;
+    const isAcceptedByOther = isAccepted && item.ngo_id !== user.id;
 
     return (
-      <View style={styles.pickupCard}>
+      <View style={[
+        styles.pickupCard,
+        isAcceptedByOther && styles.pickupCardDisabled
+      ]}>
         <View style={styles.pickupHeader}>
           <Text style={styles.restaurantName}>🍽️ {restaurantName}</Text>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>{item.status || 'Available'}</Text>
+          <View style={[
+            styles.statusBadge,
+            item.status === 'accepted' && styles.statusAccepted,
+            item.status === 'collected' && styles.statusCollected
+          ]}>
+            <Text style={styles.statusText}>
+              {isAcceptedByMe ? '✅ You Accepted' : 
+               isAcceptedByOther ? '⚠️ Accepted by Another NGO' :
+               item.status === 'collected' ? 'Collected' :
+               'Available'}
+            </Text>
           </View>
         </View>
         
@@ -155,14 +206,38 @@ const NGODashboard = ({ navigation }) => {
           <Text style={styles.pickupAddress}>📍 {item.address}</Text>
         )}
 
-        <View style={styles.pickupActions}>
-          <TouchableOpacity
-            style={styles.acceptButton}
-            onPress={() => acceptPickup(item.id)}
-          >
-            <Text style={styles.acceptButtonText}>✅ Accept Pickup</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Show accept button only if not accepted by anyone */}
+        {!isAccepted && (
+          <View style={styles.pickupActions}>
+            <TouchableOpacity
+              style={styles.acceptButton}
+              onPress={() => acceptPickup(item.id)}
+            >
+              <Text style={styles.acceptButtonText}>✅ Accept Pickup</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {/* If accepted by me, show mark as collected button */}
+        {isAcceptedByMe && (
+          <View style={styles.pickupActions}>
+            <TouchableOpacity
+              style={styles.collectedButton}
+              onPress={() => updatePickupStatus(item.id, 'collected')}
+            >
+              <Text style={styles.collectedButtonText}>📦 Mark as Collected</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {/* If accepted by another NGO, show disabled state */}
+        {isAcceptedByOther && (
+          <View style={styles.pickupActions}>
+            <View style={styles.disabledButton}>
+              <Text style={styles.disabledButtonText}>⚠️ Already Taken</Text>
+            </View>
+          </View>
+        )}
       </View>
     );
   };
@@ -267,6 +342,11 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#FF6600',
   },
+  pickupCardDisabled: {
+    backgroundColor: '#0a0a0a',
+    opacity: 0.6,
+    borderLeftColor: '#666666',
+  },
   pickupHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -284,6 +364,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  statusAccepted: {
+    backgroundColor: '#FF9800',
+  },
+  statusCollected: {
+    backgroundColor: '#9E9E9E',
   },
   statusText: {
     color: '#FFFFFF',
@@ -337,6 +423,28 @@ const styles = StyleSheet.create({
   },
   acceptButtonText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  collectedButton: {
+    backgroundColor: '#2196F3',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  collectedButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    backgroundColor: '#333333',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  disabledButtonText: {
+    color: '#999999',
     fontSize: 16,
     fontWeight: 'bold',
   },

@@ -25,6 +25,9 @@ export const useAuth = () => {
   return context;
 };
 
+// Export supabase client for realtime subscriptions
+export { supabase };
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
