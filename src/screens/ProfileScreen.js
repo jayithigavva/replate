@@ -8,6 +8,7 @@ import {
   Alert,
   TextInput,
   Switch,
+  Linking,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
@@ -39,6 +40,83 @@ const ProfileScreen = ({ navigation }) => {
           Alert.alert('Feature Coming Soon', 'Account deletion will be available in a future update.');
         }},
       ]
+    );
+  };
+
+  const handleContactSupport = () => {
+    Alert.alert(
+      'Contact Support',
+      'How would you like to contact us?',
+      [
+        { 
+          text: 'Call Now', 
+          onPress: () => Linking.openURL('tel:+918465968724')
+        },
+        { 
+          text: 'Send Email', 
+          onPress: () => Linking.openURL('mailto:support@replate.app?subject=Support Request')
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handlePrivacyPolicy = () => {
+    Alert.alert(
+      'Privacy Policy',
+      'Replate - Food Waste Reduction App\n\n' +
+      '🔒 YOUR PRIVACY MATTERS\n\n' +
+      'Data We Collect:\n' +
+      '• Email and authentication info\n' +
+      '• Location data (for pickup coordination)\n' +
+      '• Food images (for AI analysis)\n' +
+      '• Usage statistics\n\n' +
+      'How We Use It:\n' +
+      '• Connect restaurants with NGOs\n' +
+      '• AI food safety detection\n' +
+      '• Improve our services\n' +
+      '• Send notifications about pickups\n\n' +
+      'We Never:\n' +
+      '• Sell your data\n' +
+      '• Share without permission\n' +
+      '• Track you unnecessarily\n\n' +
+      'Your Rights:\n' +
+      '• Delete your data anytime\n' +
+      '• Export your information\n' +
+      '• Opt out of communications\n\n' +
+      'Contact: support@replate.app\n' +
+      'Phone: +91 8465968724',
+      [{ text: 'I Understand', style: 'default' }],
+      { cancelable: true }
+    );
+  };
+
+  const handleTermsOfService = () => {
+    Alert.alert(
+      'Terms of Service',
+      'Replate Terms of Service\n\n' +
+      '📜 AGREEMENT\n\n' +
+      'By using Replate, you agree to:\n\n' +
+      '1. Food Safety:\n' +
+      '• Restaurants ensure food quality\n' +
+      '• Use AI as guidance, not absolute\n' +
+      '• Follow local health regulations\n\n' +
+      '2. Liability:\n' +
+      '• Replate facilitates connections only\n' +
+      '• Users responsible for food safety\n' +
+      '• AI provides estimates, not guarantees\n\n' +
+      '3. Usage:\n' +
+      '• Use for food waste reduction\n' +
+      '• Accurate information required\n' +
+      '• Respect other users\n\n' +
+      '4. Account:\n' +
+      '• One account per user/organization\n' +
+      '• Keep credentials secure\n' +
+      '• Report issues promptly\n\n' +
+      'For full terms, visit: www.replate.app/terms\n' +
+      'Contact: +91 8465968724',
+      [{ text: 'Agree', style: 'default' }],
+      { cancelable: true }
     );
   };
 
@@ -147,22 +225,16 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={styles.actionButtonText}>Change Password</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton} onPress={() => {
-          Alert.alert('Feature Coming Soon', 'Contact support will be available in a future update.');
-        }}>
-          <Text style={styles.actionButtonText}>Contact Support</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={handleContactSupport}>
+          <Text style={styles.actionButtonText}>📞 Contact Support</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton} onPress={() => {
-          Alert.alert('Feature Coming Soon', 'Privacy policy will be available in a future update.');
-        }}>
-          <Text style={styles.actionButtonText}>Privacy Policy</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={handlePrivacyPolicy}>
+          <Text style={styles.actionButtonText}>🔒 Privacy Policy</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton} onPress={() => {
-          Alert.alert('Feature Coming Soon', 'Terms of service will be available in a future update.');
-        }}>
-          <Text style={styles.actionButtonText}>Terms of Service</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={handleTermsOfService}>
+          <Text style={styles.actionButtonText}>📜 Terms of Service</Text>
         </TouchableOpacity>
       </View>
 

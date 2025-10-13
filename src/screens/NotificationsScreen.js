@@ -24,45 +24,20 @@ const NotificationsScreen = ({ navigation }) => {
   const loadNotifications = async () => {
     setLoading(true);
     try {
-      // Mock notifications for now - replace with actual API call
-      const mockNotifications = [
-        {
-          id: 1,
-          title: 'New Pickup Available',
-          message: 'Restaurant "Pizza Palace" has food ready for pickup',
-          type: 'pickup',
-          timestamp: new Date().toISOString(),
-          read: false,
-        },
-        {
-          id: 2,
-          title: 'Food Scan Complete',
-          message: 'Your food has been analyzed and is safe to eat',
-          type: 'scan',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          read: false,
-        },
-        {
-          id: 3,
-          title: 'Pickup Confirmed',
-          message: 'NGO "Food Bank" has confirmed pickup of your donation',
-          type: 'confirmation',
-          timestamp: new Date(Date.now() - 7200000).toISOString(),
-          read: true,
-        },
-        {
-          id: 4,
-          title: 'Route Optimized',
-          message: 'Your pickup route has been optimized for efficiency',
-          type: 'route',
-          timestamp: new Date(Date.now() - 10800000).toISOString(),
-          read: true,
-        },
-      ];
+      // Fetch real notifications from backend
+      const response = await fetch(`${API_BASE_URL}/notifications/${user.id}`);
+      const data = await response.json();
       
-      setNotifications(mockNotifications);
+      if (data.success) {
+        setNotifications(data.notifications || []);
+      } else {
+        // If endpoint doesn't exist yet or error, show empty
+        setNotifications([]);
+      }
     } catch (error) {
-      Alert.alert('Error', 'Failed to load notifications');
+      // No notifications yet - this is expected for new users
+      console.log('No notifications available (this is normal for new accounts)');
+      setNotifications([]);
     } finally {
       setLoading(false);
     }

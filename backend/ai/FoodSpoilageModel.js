@@ -81,10 +81,16 @@ class FoodSpoilageModel {
   // Load pre-trained model or create new one
   async loadModel() {
     try {
-      // Try to load existing model
-      const modelPath = path.join(__dirname, 'models', 'food-spoilage-model.json');
+      // Try to load existing model - the actual model.json is inside the directory
+      const modelPath = path.join(__dirname, 'models', 'food-spoilage-model.json', 'model.json');
       if (fs.existsSync(modelPath)) {
         this.model = await tf.loadLayersModel(`file://${modelPath}`);
+        // Compile the loaded model
+        this.model.compile({
+          optimizer: tf.train.adam(0.001),
+          loss: 'categoricalCrossentropy',
+          metrics: ['accuracy']
+        });
         console.log('✅ Loaded existing food spoilage model');
       } else {
         // Create new model
@@ -140,95 +146,126 @@ class FoodSpoilageModel {
       processedImage.dispose();
       prediction.dispose();
       
-      // Extract results
+      // Extract results (model outputs: [safe_probability, spoiled_probability])
       const safeProbability = predictionArray[0];
       const spoiledProbability = predictionArray[1];
       
-      const isSafe = safeProbability > spoiledProbability;
-      const confidence = Math.max(safeProbability, spoiledProbability);
+      // Improved accuracy: Use higher confidence threshold and better decision logic
+      const probabilityDifference = Math.abs(safeProbability - spoiledProbability);
+      const CONFIDENCE_THRESHOLD = 0.20; // Need at least 20% difference for confident prediction
+      const SAFE_THRESHOLD = 0.60; // Safe needs to be at least 60% to be considered truly safe
       
-      // Generate detailed analysis
-      const analysis = this.generateDetailedAnalysis(isSafe, confidence, imageBuffer);
+      let isSafe, confidence;
       
+      if (probabilityDifference < CONFIDENCE_THRESHOLD) {
+        // Too close to call - be conservative (mark as not safe when uncertain for food safety)
+        isSafe = false; // When uncertain, err on side of caution
+        confidence = 0.5; // Low confidence
+      } else if (safeProbability >= SAFE_THRESHOLD) {
+        // Strong indication of safe food
+        isSafe = true;
+        confidence = safeProbability;
+      } else if (spoiledProbability >= SAFE_THRESHOLD) {
+        // Strong indication of spoiled food
+        isSafe = false;
+        confidence = spoiledProbability;
+      } else {
+        // Moderate confidence - use standard comparison
+        isSafe = safeProbability > spoiledProbability;
+        confidence = Math.max(safeProbability, spoiledProbability);
+      }
+      
+      // Simple response: ONLY safe/spoiled + confidence
       return {
         status: isSafe ? 'safe' : 'spoiled',
-        confidence: confidence,
-        message: analysis.message,
-        indicators: analysis.indicators,
-        foodType: analysis.foodType,
-        recommendations: analysis.recommendations
+        confidence: confidence
       };
       
     } catch (error) {
       console.error('Error analyzing food:', error);
       return {
         status: 'safe',
-        confidence: 0.5,
-        message: 'Unable to analyze image, please use your judgment',
-        indicators: [],
-        foodType: 'unknown',
-        recommendations: ['Check for visible signs of spoilage', 'Use your senses to assess freshness']
+        confidence: 0.5
       };
     }
   }
 
   // Generate detailed analysis based on prediction
   generateDetailedAnalysis(isSafe, confidence, imageBuffer) {
-    const imageSize = imageBuffer.length;
-    const timestamp = Date.now();
+    // Generate analysis directly from model predictions
+    let message, indicators, recommendations, foodType;
     
-    // Simulate realistic analysis based on image characteristics
-    const scenarios = [
-      {
-        status: 'safe',
-        confidence: 0.85 + Math.random() * 0.1,
-        message: 'Food appears fresh and safe for consumption. No visible signs of spoilage detected.',
-        indicators: [],
-        foodType: 'Fresh produce',
-        recommendations: ['Store in cool, dry place', 'Consume within recommended timeframe']
-      },
-      {
-        status: 'safe',
-        confidence: 0.75 + Math.random() * 0.1,
-        message: 'Food appears mostly fresh. Minor discoloration detected but likely safe.',
-        indicators: ['slight discoloration'],
-        foodType: 'Vegetables/Fruits',
-        recommendations: ['Consume soon', 'Check for any unusual odors']
-      },
-      {
-        status: 'spoiled',
-        confidence: 0.80 + Math.random() * 0.1,
-        message: 'Signs of spoilage detected: discoloration and potential mold growth. Not recommended for consumption.',
-        indicators: ['discoloration', 'potential mold'],
-        foodType: 'Bread/Dairy',
-        recommendations: ['Do not consume', 'Dispose safely']
-      },
-      {
-        status: 'spoiled',
-        confidence: 0.90 + Math.random() * 0.05,
-        message: 'Clear signs of spoilage: mold, discoloration, and texture changes detected. Do not consume.',
-        indicators: ['mold', 'discoloration', 'texture changes'],
-        foodType: 'Meat/Seafood',
-        recommendations: ['Do not consume', 'Dispose immediately', 'Clean storage area']
+    if (isSafe) {
+      // Safe food - different messages based on confidence
+      if (confidence > 0.9) {
+        message = 'Food appears fresh and safe for consumption. No visible signs of spoilage detected.';
+        indicators = [];
+        foodType = 'Fresh produce';
+        recommendations = [
+          'Store in appropriate conditions',
+          'Consume within recommended timeframe',
+          'Follow proper food safety practices'
+        ];
+      } else if (confidence > 0.75) {
+        message = 'Food appears mostly fresh and safe. Model is reasonably confident in this assessment.';
+        indicators = ['possible minor discoloration'];
+        foodType = 'Produce';
+        recommendations = [
+          'Visual inspection recommended',
+          'Check for any unusual odors',
+          'Consume within a few days'
+        ];
+      } else {
+        message = 'Food appears safe but model confidence is moderate. Use additional senses to verify.';
+        indicators = ['uncertain classification'];
+        foodType = 'Food item';
+        recommendations = [
+          'Verify with smell and visual inspection',
+          'Use your judgment',
+          'When in doubt, throw it out'
+        ];
       }
-    ];
-    
-    // Select scenario based on prediction
-    let selectedScenario;
-    if (isSafe && confidence > 0.8) {
-      selectedScenario = scenarios[0];
-    } else if (isSafe && confidence > 0.7) {
-      selectedScenario = scenarios[1];
-    } else if (!isSafe && confidence > 0.8) {
-      selectedScenario = scenarios[3];
     } else {
-      selectedScenario = scenarios[2];
+      // Spoiled food - different messages based on confidence
+      if (confidence > 0.9) {
+        message = 'Clear signs of spoilage detected. Do not consume this food.';
+        indicators = ['visible spoilage signs', 'potential mold or decay'];
+        foodType = 'Spoiled food';
+        recommendations = [
+          'Do not consume',
+          'Dispose of immediately',
+          'Clean storage area',
+          'Check other nearby foods'
+        ];
+      } else if (confidence > 0.75) {
+        message = 'Signs of spoilage detected. Not recommended for consumption.';
+        indicators = ['discoloration', 'potential spoilage'];
+        foodType = 'Questionable food';
+        recommendations = [
+          'Do not consume',
+          'Dispose safely',
+          'When in doubt, throw it out'
+        ];
+      } else {
+        message = 'Possible spoilage detected but model confidence is moderate. Exercise caution.';
+        indicators = ['uncertain spoilage signs'];
+        foodType = 'Food item';
+        recommendations = [
+          'Inspect carefully',
+          'Check for odor and texture changes',
+          'Better safe than sorry - consider discarding'
+        ];
+      }
     }
     
-    // Adjust confidence to match prediction
-    selectedScenario.confidence = confidence;
-    
-    return selectedScenario;
+    return {
+      status: isSafe ? 'safe' : 'spoiled',
+      confidence: confidence,
+      message: message,
+      indicators: indicators,
+      foodType: foodType,
+      recommendations: recommendations
+    };
   }
 
   // Train the model with your data

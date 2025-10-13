@@ -3,10 +3,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client
-const supabaseUrl = process.env.https://ystrzvkgqkqklgcflkbp.supabase.co
-const supabaseAnonKey = process.env.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzdHJ6dmtncWtxa2xnY2Zsa2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NDgzNzYsImV4cCI6MjA3NTIyNDM3Nn0.MNINi3Vt5S6VBxe_JRxYVdUloWhxm5bCWF5FmcSTM38 || 'your-anon-key-here';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://ystrzvkgqkqklgcflkbp.supabase.co';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzdHJ6dmtncWtxa2xnY2Zsa2JwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2NDgzNzYsImV4cCI6MjA3NTIyNDM3Nn0.MNINi3Vt5S6VBxe_JRxYVdUloWhxm5bCWF5FmcSTM38';
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 
 const AuthContext = createContext({});
 
@@ -29,13 +36,55 @@ export const AuthProvider = ({ children }) => {
 
   const checkSession = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setUser(session.user);
+      console.log('Checking session...');
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Session check timeout')), 5000)
+      );
+      
+      const sessionPromise = supabase.auth.getSession();
+      
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+      
+      if (session && session.user) {
+        console.log('Session found:', session.user.email);
+        
+        // Get user role from users table
+        try {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+          if (userError || !userData) {
+            console.log('User not found in users table, clearing session');
+            await supabase.auth.signOut();
+            setUser(null);
+          } else {
+            // Set user with role
+            setUser({
+              ...session.user,
+              role: userData.role
+            });
+            console.log('User loaded with role:', userData.role);
+          }
+        } catch (roleError) {
+          console.log('Error fetching role, clearing session');
+          await supabase.auth.signOut();
+          setUser(null);
+        }
+      } else {
+        console.log('No active session');
+        setUser(null);
       }
     } catch (error) {
-      console.error('Error checking session:', error);
+      console.error('Error checking session:', error.message);
+      // Clear any invalid session
+      setUser(null);
     } finally {
+      console.log('Session check complete, loading: false');
       setLoading(false);
     }
   };

@@ -8,7 +8,6 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 
 // Import screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -16,27 +15,16 @@ import RestaurantDashboard from './src/screens/RestaurantDashboard';
 import NGODashboard from './src/screens/NGODashboard';
 import ProfileScreen from './src/screens/ProfileScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import LoadingScreen from './src/components/LoadingScreen';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Simple Loading Screen Component
-function LoadingScreen() {
-  console.log('LoadingScreen rendered');
-  return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#FF6600" />
-      <Text style={styles.loadingText}>Loading...</Text>
-    </View>
-  );
-}
-
 // Tab Navigator for authenticated users
 function TabNavigator() {
   const { user } = useAuth();
-  console.log('TabNavigator rendered for user:', user?.email);
   
   return (
     <Tab.Navigator
@@ -95,11 +83,9 @@ function TabNavigator() {
 // Main App Navigator
 function AppNavigator() {
   const { user, loading } = useAuth();
-  
-  console.log('AppNavigator state - loading:', loading, 'user:', user?.email || 'none');
 
   if (loading) {
-    return <LoadingScreen />;
+    return <LoadingScreen message="Initializing..." />;
   }
 
   return (
@@ -116,29 +102,25 @@ function AppNavigator() {
           },
         }}
       >
-        {user ? [
+        {user ? (
           <Stack.Screen 
-            key="Main"
             name="Main" 
             component={TabNavigator}
             options={{ headerShown: false }}
           />
-        ] : [
+        ) : (
           <Stack.Screen 
-            key="Login"
             name="Login" 
             component={LoginScreen}
             options={{ headerShown: false }}
           />
-        ]}
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
 
 export default function App() {
-  console.log('App component rendering');
-  
   return (
     <ErrorBoundary>
       <SafeAreaProvider>
@@ -149,17 +131,3 @@ export default function App() {
     </ErrorBoundary>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    color: '#FF6600',
-    fontSize: 18,
-    marginTop: 20,
-  },
-});

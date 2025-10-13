@@ -80,7 +80,6 @@ cp env.example .env
 # Edit .env with your actual keys:
 # - SUPABASE_URL
 # - SUPABASE_ANON_KEY
-# - HUGGING_FACE_API_TOKEN (optional for now)
 ```
 
 ### **Step 4: Test Backend Locally**
@@ -115,24 +114,21 @@ npm start
 3. **Update Frontend API URL:**
    - Update `src/config/api.js` with your Render URL
 
-### **Step 7: Set Up Mapbox**
+### **Step 7: Deploy to Render**
 
-1. **Create Mapbox Account:**
-   - Go to [mapbox.com](https://mapbox.com)
-   - Get your access token
+1. **Create Render Account:**
+   - Go to [render.com](https://render.com)
+   - Connect your GitHub repository
 
-2. **Update Configuration:**
-   - Add Mapbox token to your environment variables
+2. **Deploy Backend:**
+   - Create new Web Service
+   - Select your repository
+   - Render will auto-detect the backend
+   - Add environment variables (SUPABASE_URL, SUPABASE_ANON_KEY)
 
-### **Step 8: Set Up Hugging Face AI (Optional)**
-
-1. **Create Hugging Face Account:**
-   - Go to [huggingface.co](https://huggingface.co)
-   - Get API token
-
-2. **Deploy Food Safety Model:**
-   - Use a food classification model
-   - Update backend with your model URL
+3. **Update Frontend:**
+   - Copy your Render backend URL (e.g., https://replate-backend.onrender.com)
+   - Update `src/config/api.js` with your production URL
 
 ---
 
@@ -155,9 +151,9 @@ npm start
 
 ### **Realtime Features:**
 - Supabase subscriptions for live updates
-- Mapbox integration for location visualization
-- AI-powered food safety detection
-- Chatbot for food safety tips
+- Simple list view for NGO pickups
+- Custom AI-powered food safety detection (TensorFlow.js)
+- Intelligent chatbot for food safety tips
 
 ---
 

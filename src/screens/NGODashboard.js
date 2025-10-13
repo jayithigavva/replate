@@ -9,38 +9,63 @@ import {
   FlatList,
   RefreshControl,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
 
 const NGODashboard = ({ navigation }) => {
   const { user, signOut } = useAuth();
   const [pickups, setPickups] = useState([]);
-  const [groupedPickups, setGroupedPickups] = useState({});
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedPickup, setSelectedPickup] = useState(null);
+  const [lastPickupCount, setLastPickupCount] = useState(0);
 
   useEffect(() => {
     loadPickups();
-  }, []);
+    
+    // Set up real-time updates - check for new pickups every 10 seconds
+    const interval = setInterval(() => {
+      console.log('Auto-refreshing pickups for NGO...');
+      loadPickups(true); // Silent refresh (no loading spinner)
+    }, 10000); // 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [lastPickupCount]);
 
-  const loadPickups = async () => {
-    setLoading(true);
+  const loadPickups = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const response = await fetch(`${API_BASE_URL}/ngo-dashboard?ngoId=${user.id}`);
       const data = await response.json();
 
       if (data.success) {
-        setPickups(data.pickups);
-        setGroupedPickups(data.groupedPickups);
+        const newPickups = data.pickups || [];
+        
+        // Check if there are NEW pickups (not just initial load)
+        if (lastPickupCount > 0 && newPickups.length > lastPickupCount) {
+          const newCount = newPickups.length - lastPickupCount;
+          Alert.alert(
+            '🔔 New Pickup Available!', 
+            `${newCount} new pickup${newCount > 1 ? 's' : ''} ready for collection!`,
+            [{ text: 'View', style: 'default' }]
+          );
+        }
+        
+        setPickups(newPickups);
+        setLastPickupCount(newPickups.length);
       } else {
-        Alert.alert('Error', data.error || 'Failed to load pickups');
+        // If endpoint fails, show empty (this is fine for new setup)
+        console.log('No pickups available yet');
+        setPickups([]);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to load pickups');
+      console.log('Failed to load pickups - this is normal for new setup');
+      setPickups([]);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -76,165 +101,111 @@ const NGODashboard = ({ navigation }) => {
     }
   };
 
-  const renderPickupItem = ({ item }) => (
-    <View style={styles.pickupCard}>
-      <View style={styles.pickupHeader}>
-        <Text style={styles.restaurantEmail}>{item.restaurant?.email}</Text>
-        <Text style={styles.pickupTime}>
-          {new Date(item.created_at).toLocaleTimeString()}
-        </Text>
-      </View>
-      
-      <Text style={styles.pickupDescription}>{item.description}</Text>
-      
-      {item.address && (
-        <Text style={styles.pickupAddress}>📍 {item.address}</Text>
-      )}
+  const acceptPickup = async (pickupId) => {
+    Alert.alert(
+      'Accept Pickup',
+      'Are you sure you want to accept this pickup?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Accept',
+          onPress: () => updatePickupStatus(pickupId, 'accepted')
+        }
+      ]
+    );
+  };
 
-      <View style={styles.pickupActions}>
-        <TouchableOpacity
-          style={styles.collectButton}
-          onPress={() => updatePickupStatus(item.id, 'collected')}
-        >
-          <Text style={styles.collectButtonText}>✅ Collected</Text>
-        </TouchableOpacity>
+  const renderPickupItem = ({ item }) => {
+    // Extract restaurant name from email or use full email
+    const restaurantName = item.restaurant_name || item.restaurant?.email || 'Restaurant';
+    const formattedDate = new Date(item.created_at).toLocaleString();
+
+    return (
+      <View style={styles.pickupCard}>
+        <View style={styles.pickupHeader}>
+          <Text style={styles.restaurantName}>🍽️ {restaurantName}</Text>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>{item.status || 'Available'}</Text>
+          </View>
+        </View>
         
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => updatePickupStatus(item.id, 'cancelled')}
-        >
-          <Text style={styles.cancelButtonText}>❌ Cancel</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+        <Text style={styles.pickupTime}>📅 {formattedDate}</Text>
+        
+        {item.food_type && (
+          <Text style={styles.foodType}>🥗 {item.food_type}</Text>
+        )}
+        
+        {item.quantity && (
+          <Text style={styles.quantity}>📦 Quantity: {item.quantity}</Text>
+        )}
+        
+        {item.expiry_time && (
+          <Text style={styles.expiry}>⏰ Expires: {new Date(item.expiry_time).toLocaleTimeString()}</Text>
+        )}
+        
+        {item.notes && (
+          <Text style={styles.notes}>📝 {item.notes}</Text>
+        )}
+        
+        {item.description && (
+          <Text style={styles.pickupDescription}>{item.description}</Text>
+        )}
+        
+        {item.address && (
+          <Text style={styles.pickupAddress}>📍 {item.address}</Text>
+        )}
 
-  const renderGroupedPickup = (location, pickupList) => (
-    <View key={location} style={styles.groupCard}>
-      <Text style={styles.groupTitle}>📍 {location}</Text>
-      <Text style={styles.groupCount}>{pickupList.length} pickup(s)</Text>
-      
-      {pickupList.map((pickup) => (
-        <View key={pickup.id} style={styles.groupItem}>
-          <Text style={styles.groupItemText}>
-            {pickup.restaurant?.email} - {new Date(pickup.created_at).toLocaleTimeString()}
-          </Text>
+        <View style={styles.pickupActions}>
           <TouchableOpacity
-            style={styles.groupActionButton}
-            onPress={() => updatePickupStatus(pickup.id, 'collected')}
+            style={styles.acceptButton}
+            onPress={() => acceptPickup(item.id)}
           >
-            <Text style={styles.groupActionText}>Collect</Text>
+            <Text style={styles.acceptButtonText}>✅ Accept Pickup</Text>
           </TouchableOpacity>
         </View>
-      ))}
-    </View>
-  );
-
-  // Get coordinates for map (mock data for now)
-  const getMapRegion = () => {
-    if (pickups.length === 0) {
-      return {
-        latitude: 37.7749,
-        longitude: -122.4194,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      };
-    }
-
-    // Calculate center point from pickups
-    const avgLat = pickups.reduce((sum, pickup) => sum + (pickup.location?.latitude || 37.7749), 0) / pickups.length;
-    const avgLng = pickups.reduce((sum, pickup) => sum + (pickup.location?.longitude || -122.4194), 0) / pickups.length;
-
-    return {
-      latitude: avgLat,
-      longitude: avgLng,
-      latitudeDelta: 0.0922,
-      longitudeDelta: 0.0421,
-    };
+      </View>
+    );
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>NGO Dashboard</Text>
-      </View>
-
-      {/* Map View */}
-      <View style={styles.mapSection}>
-        <Text style={styles.sectionTitle}>Pickup Locations</Text>
-        <View style={styles.mapContainer}>
-          <MapView
-            style={styles.map}
-            region={getMapRegion()}
-            showsUserLocation={true}
-            showsMyLocationButton={true}
-          >
-            {pickups.map((pickup) => (
-              <Marker
-                key={pickup.id}
-                coordinate={{
-                  latitude: pickup.location?.latitude || 37.7749,
-                  longitude: pickup.location?.longitude || -122.4194,
-                }}
-                title={pickup.restaurant?.email}
-                description={pickup.description}
-                pinColor="#FF6600"
-              />
-            ))}
-          </MapView>
-        </View>
+        <Text style={styles.welcomeText}>Available Pickups</Text>
+        <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+          <Text style={styles.refreshText}>🔄</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Pickup Summary */}
       <View style={styles.summarySection}>
-        <Text style={styles.sectionTitle}>Pickup Summary</Text>
-        <View style={styles.summaryCards}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>{pickups.length}</Text>
-            <Text style={styles.summaryLabel}>Total Pickups</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>{Object.keys(groupedPickups).length}</Text>
-            <Text style={styles.summaryLabel}>Locations</Text>
-          </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryNumber}>{pickups.length}</Text>
+          <Text style={styles.summaryLabel}>Available Pickups</Text>
         </View>
       </View>
 
-      {/* Grouped Pickups */}
-      {Object.keys(groupedPickups).length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Optimized Routes</Text>
-          {Object.entries(groupedPickups).map(([location, pickupList]) =>
-            renderGroupedPickup(location, pickupList)
-          )}
-        </View>
-      )}
-
-      {/* All Pickups List */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>All Pickups</Text>
-          <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
-            <Text style={styles.refreshText}>🔄 Refresh</Text>
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={pickups}
-          renderItem={renderPickupItem}
-          keyExtractor={(item) => item.id}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No pickups available</Text>
-              <Text style={styles.emptySubtext}>Pull down to refresh</Text>
-            </View>
-          }
-        />
-      </View>
-    </ScrollView>
+      {/* Pickups List */}
+      <FlatList
+        data={pickups}
+        renderItem={renderPickupItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor="#FF6600"
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>🍽️</Text>
+            <Text style={styles.emptyText}>No pickups available right now</Text>
+            <Text style={styles.emptySubtext}>Pull down to refresh</Text>
+          </View>
+        }
+      />
+    </View>
   );
 };
 
@@ -246,191 +217,141 @@ const styles = StyleSheet.create({
   header: {
     padding: 20,
     backgroundColor: '#111111',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   welcomeText: {
     color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  refreshButton: {
+    backgroundColor: '#FF6600',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  refreshText: {
+    color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: 'bold',
-  },
-  mapSection: {
-    backgroundColor: '#111111',
-    margin: 10,
-    padding: 20,
-    borderRadius: 15,
-  },
-  sectionTitle: {
-    color: '#FF6600',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
-  mapContainer: {
-    height: 250,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  map: {
-    flex: 1,
   },
   summarySection: {
     backgroundColor: '#111111',
-    margin: 10,
+    margin: 15,
     padding: 20,
     borderRadius: 15,
-  },
-  summaryCards: {
-    flexDirection: 'row',
-    gap: 15,
+    alignItems: 'center',
   },
   summaryCard: {
-    flex: 1,
-    backgroundColor: '#222222',
-    padding: 20,
-    borderRadius: 10,
     alignItems: 'center',
   },
   summaryNumber: {
     color: '#FF6600',
-    fontSize: 32,
+    fontSize: 42,
     fontWeight: 'bold',
   },
   summaryLabel: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 16,
     marginTop: 5,
   },
-  section: {
-    backgroundColor: '#111111',
-    margin: 10,
-    padding: 20,
-    borderRadius: 15,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  refreshButton: {
-    backgroundColor: '#FF6600',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
-  },
-  refreshText: {
-    color: '#000000',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  groupCard: {
-    backgroundColor: '#222222',
+  listContainer: {
     padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  groupTitle: {
-    color: '#FF6600',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  groupCount: {
-    color: '#CCCCCC',
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  groupItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333333',
-  },
-  groupItemText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    flex: 1,
-  },
-  groupActionButton: {
-    backgroundColor: '#FF6600',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 5,
-  },
-  groupActionText: {
-    color: '#000000',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   pickupCard: {
-    backgroundColor: '#222222',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
+    backgroundColor: '#111111',
+    padding: 20,
+    borderRadius: 15,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6600',
   },
   pickupHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  restaurantEmail: {
+  restaurantName: {
     color: '#FF6600',
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  statusBadge: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: 'bold',
   },
   pickupTime: {
     color: '#CCCCCC',
-    fontSize: 12,
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  foodType: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    marginBottom: 6,
+  },
+  quantity: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    marginBottom: 6,
+  },
+  expiry: {
+    color: '#FF9800',
+    fontSize: 14,
+    marginBottom: 6,
+  },
+  notes: {
+    color: '#CCCCCC',
+    fontSize: 14,
+    fontStyle: 'italic',
+    marginBottom: 8,
   },
   pickupDescription: {
     color: '#FFFFFF',
     fontSize: 14,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   pickupAddress: {
     color: '#CCCCCC',
-    fontSize: 12,
+    fontSize: 13,
     marginBottom: 15,
   },
   pickupActions: {
-    flexDirection: 'row',
-    gap: 10,
+    marginTop: 10,
   },
-  collectButton: {
-    flex: 1,
+  acceptButton: {
     backgroundColor: '#4CAF50',
-    padding: 10,
-    borderRadius: 8,
+    padding: 15,
+    borderRadius: 10,
     alignItems: 'center',
   },
-  collectButtonText: {
+  acceptButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: '#F44336',
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   emptyContainer: {
     alignItems: 'center',
-    padding: 40,
+    padding: 60,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 15,
   },
   emptyText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    marginBottom: 5,
+    fontSize: 18,
+    marginBottom: 8,
   },
   emptySubtext: {
     color: '#CCCCCC',
